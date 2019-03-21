@@ -14,30 +14,33 @@ class Model(torch.nn.Module):
     def __init__(self, g_theta_layer,
                  f_phi_layer,
                  embedding_dim, rnn_dim,
-                 answer_vocab_size, fixed_embed):
+                 input_dim,
+                 answer_vocab_size, fixed_embed, **kwargs):
         super(Model, self).__init__()
 
-        kernel_size = 1
+        kernel_size = 3
         stride = 1
         self.encoder_layer = list()
-        pad = 0
+        pad = 1
         #
-        self.encoder_layer.append(nn.Conv2d(1024, 512, kernel_size,
+        self.encoder_layer.append(nn.Conv2d(1024, 256, kernel_size,
                                             stride, pad,
                                             bias=False))
-        self.encoder_layer.append(nn.BatchNorm2d(512))
+        self.encoder_layer.append(nn.BatchNorm2d(256))
         self.encoder_layer.append(nn.ReLU())
-        self.encoder_layer.append(nn.Conv2d(512, 512, kernel_size,
+        self.encoder_layer.append(nn.Conv2d(256, 256, kernel_size,
                                             stride, pad,
                                             bias=False))
-        self.encoder_layer.append(nn.BatchNorm2d(512))
+        self.encoder_layer.append(nn.BatchNorm2d(256))
         self.encoder_layer.append(nn.ReLU())
 
         self.encode = nn.Sequential(*self.encoder_layer)
 
-        # self.reduced_dim = 14
-        self.reduced_dim = (20, 30)
-        prev_channel = 512
+        if input_dim == 128:
+            self.reduced_dim = (14, 14)
+        elif input_dim == 320:
+            self.reduced_dim = (20, 30)
+        prev_channel = 256
 
         self.grid_coord = Coordinate(self.reduced_dim)
 
@@ -59,7 +62,7 @@ class Model(torch.nn.Module):
 
         # self.q_att = Attention(rnn_dim * 2, rnn_dim)
 
-        self.g_theta = ConvBlock(1, 1, 0, prev_channel, g_theta_layer).cuda()
+        self.g_theta = ConvBlock(1, 1, 0, prev_channel, g_theta_layer)
         # self.g_theta = ConvBlock(1, 1, 0, prev_channel, g_theta_layer)
 
         self.f_phi_layer = list()
@@ -79,7 +82,7 @@ class Model(torch.nn.Module):
                       bias=False)])
 
     def forward(self, x):
-        image_embed, question_padded, lengths = x
+        image_embed, question_padded, q_mask_padded, lengths = x
         image_embed = self.encode(image_embed)
         # image_embed = image_embed / (image_embed.norm(p=2, dim=1, keepdim=True).expand_as(
         #     image_embed) + 1e-8)

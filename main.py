@@ -27,6 +27,8 @@ parser.add_argument('-g_theta_layer', type=int, nargs='+')
 parser.add_argument('-f_phi_layer', type=int, nargs='+')
 parser.add_argument('-classifier_layer', type=int, nargs='+')
 parser.add_argument('-embedding_dim', type=int)
+parser.add_argument('-q_att_layer', type=int, nargs='+')
+parser.add_argument('-img_att_layer', type=int, nargs='+')
 parser.add_argument('-fixed_embed', action='store_true', default=False)
 parser.add_argument('-rnn_dim', type=int)
 parser.add_argument('-rnn_layer_size', type=int)
@@ -72,13 +74,13 @@ if args.restore:
     sys.path[0] = f'result/{args.datasetname}/{args.restore}/model'
 
     if args.model == 'base':
-        from base_cnn_model import Model
-    elif args.model == 'sarn':
-        from base_cnn_model import Model
-    elif args.model == 'onebyone':
-        from base_onebyone_conv import Model
+        from base import Model
     elif args.model == 'topdown':
         from topdown_model import Model
+    elif args.model == 'base_bert':
+        from base_bert import Model
+    elif args.model == 'base_q_att':
+        from base_q_att import Model
 
 
     with open(os.path.join(model_dir, 'model.pkl'), 'rb') as f:
@@ -103,16 +105,32 @@ if args.restore:
 else:
 
     if args.model == 'topdown':
+        f_phi_layer = '-'.join([str(x) for x in args.f_phi_layer])
+        img_att_layer = '-'.join([str(x) for x in args.img_att_layer])
         log_dir = f'result/{args.datasetname}/' \
-            f'{args.model}_i_{args.input_dim}_' \
+            f'{args.model}_i_{args.input_dim}_f_{f_phi_layer}_img_att{img_att_layer}' \
             f'e_{args.embedding_dim}_r_{args.rnn_dim}_' \
             f'b_{args.batch_size}_fixed_embed_{args.fixed_embed}_gpu_{multiplier}_{args.option}'
-    else:
+    elif args.model == 'base':
         g_theta_layer = '-'.join([str(x) for x in args.g_theta_layer])
         f_phi_layer = '-'.join([str(x) for x in args.f_phi_layer])
         log_dir = f'result/{args.datasetname}/' \
             f'{args.model}_i_{args.input_dim}_g_{g_theta_layer}_f_{f_phi_layer}_' \
             f'e_{args.embedding_dim}_r_{args.rnn_dim}_' \
+            f'b_{args.batch_size}_fixed_embed_{args.fixed_embed}_gpu_{multiplier}_{args.option}'
+    elif args.model == 'base_bert':
+        g_theta_layer = '-'.join([str(x) for x in args.g_theta_layer])
+        f_phi_layer = '-'.join([str(x) for x in args.f_phi_layer])
+        log_dir = f'result/{args.datasetname}/{args.model}_i_{args.input_dim}_' \
+            f'g_{g_theta_layer}_f_{f_phi_layer}_r_{args.rnn_dim}_b_{args.batch_size}_' \
+            f'fixed_embed_{args.fixed_embed}_gpu_{multiplier}_{args.option}'
+    elif args.model == 'base_q_att':
+        g_theta_layer = '-'.join([str(x) for x in args.g_theta_layer])
+        f_phi_layer = '-'.join([str(x) for x in args.f_phi_layer])
+        q_att_layer = '-'.join([str(x) for x in args.q_att_layer])
+        log_dir = f'result/{args.datasetname}/' \
+            f'{args.model}_i_{args.input_dim}_g_{g_theta_layer}_f_{f_phi_layer}_' \
+            f'e_{args.embedding_dim}_r_{args.rnn_dim}_at_{q_att_layer}' \
             f'b_{args.batch_size}_fixed_embed_{args.fixed_embed}_gpu_{multiplier}_{args.option}'
 
     model_dir = os.path.join(log_dir, 'model')
@@ -121,25 +139,27 @@ else:
         os.makedirs(model_dir)
 
     if args.model == 'base':
-        from base_cnn_model import Model
-        model_script = 'base_cnn_model.py'
-    elif args.model == 'sarn':
-        from base_cnn_model import Model
-    elif args.model == 'onebyone':
-        from base_onebyone_conv import Model
-        model_script = 'base_onebyone_conv.py'
+        from base import Model
+        model_script = 'base.py'
     elif args.model == 'topdown':
         from topdown_model import Model
         model_script = 'topdown_model.py'
+    elif args.model == 'base_bert':
+        from base_bert import Model
+        model_script = 'base_bert.py'
+    elif args.model == 'base_q_att':
+        from base_q_att import Model
+        model_script = 'base_q_att.py'
 
     shutil.copyfile(model_script, os.path.join(model_dir, model_script))
     shutil.copyfile('ops.py', os.path.join(model_dir, 'ops.py'))
 
-    model = Model(args.g_theta_layer,
-                  args.f_phi_layer,
-                  args.embedding_dim,
-                  args.rnn_dim,
-                  args.answer_vocab_size, args.fixed_embed)
+    model = Model(**vars(args))
+    # model = Model(args.g_theta_layer,
+    #               args.f_phi_layer,
+    #               args.embedding_dim,
+    #               args.rnn_dim,
+    #               args.answer_vocab_size, args.fixed_embed)
 
     optimizer = optim.Adam(model.parameters(), lr=2.5 * 1e-4)
 
@@ -162,9 +182,11 @@ with open(os.path.join(qa_dir, 'idx_word_dict.pkl'), 'rb') as f:
 
 
 
+is_bert = args.model == 'base_bert'
 train_loader, test_loader, input_dim = dataset.load_data(args.datasetname,
                                                          args.batch_size * multiplier,
                                                          args.input_dim,
+                                                         is_bert,
                                                          multiplier)
 
 

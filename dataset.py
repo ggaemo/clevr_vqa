@@ -21,7 +21,7 @@ class PadSequence():
         q_type_list = list()
         a_list = list()
         idx_list = list()
-
+        q_mask_list = list()
 
         for image, q, q_len, q_type, a, idx in  batch:
             image_list.append(image)
@@ -30,44 +30,20 @@ class PadSequence():
             q_type_list.append(q_type)
             a_list.append(a)
             idx_list.append(idx)
+            q_mask_list.append(np.ones(q_len))
 
         image = torch.stack(image_list)
         q = [torch.LongTensor(x) for x in q_list]
+        q_mask = [torch.LongTensor(x) for x in q_mask_list]
         a = torch.LongTensor(a_list)
         q_type = torch.LongTensor(q_type_list)
         idx_list = torch.LongTensor(idx_list)
 
         q_padded = torch.nn.utils.rnn.pad_sequence(q, batch_first=True)
+        q_mask_padded = torch.nn.utils.rnn.pad_sequence(q_mask, batch_first=True)
         lengths = torch.LongTensor(q_len_list)
 
-        return image, q_padded, lengths, q_type, a, idx_list
-
-
-class ImageDuplicate():
-    def __call__(self, batch):
-
-        image_list = list()
-        q_color_list = list()
-        q_type_list = list()
-        q_subtype_list = list()
-        a_list = list()
-
-        for x in batch:
-            q_color_list.extend(x[1])
-            q_type_list.extend(x[2])
-            q_subtype_list.extend(x[3])
-            a_list.extend(x[4])
-            num_q = len(x[1])
-            image_list.extend(x[0].unsqueeze(0).expand(num_q, -1, -1, -1))
-
-        image_list = torch.stack(image_list)
-        q_color_list = torch.LongTensor(q_color_list)
-        q_type_list = torch.LongTensor(q_type_list)
-        q_subtype_list = torch.LongTensor(q_subtype_list)
-        a_list = torch.LongTensor(a_list)
-
-        return image_list, q_color_list, q_type_list, q_subtype_list, a_list
-
+        return image, q_padded, q_mask_padded, lengths, q_type, a, idx_list
 
 class CLEVRDataset(Dataset):
 
@@ -127,19 +103,31 @@ class CLEVRDataset(Dataset):
 
 class CLEVRresnet101Dataset(Dataset):
 
-    def __init__(self, qa_dir, is_train, transform=None):
+    def __init__(self, qa_dir, is_train, input_dim, is_bert, transform=None):
+
+
 
         if is_train:
             self.data_type = 'train'
         else:
             self.data_type='val'
 
-        self.feature_data = h5py.File('data/CLEVR_preprocessed/CLEVR_resnet101/{}.h5'.format(
-                self.data_type), 'r')['features']
+        self.is_bert = is_bert
 
+        if is_bert:
+            print('ADDING CLS AND SEP token')
 
-        with open(os.path.join(qa_dir, '{}_data.pkl'.format(self.data_type)), 'rb') as f:
-            self.meta_data = pickle.load(f)
+        self.input_dim = input_dim
+        # self.feature_data = np.load('data/CLEVRresnet101_{}/{}.npy'.format( input_dim,
+        #                                                                   self.data_type))
+
+        if is_bert:
+            with open(os.path.join(qa_dir, '{}_data_bert.pkl'.format(self.data_type)),
+                      'rb') as f:
+                self.meta_data = pickle.load(f)
+        else:
+            with open(os.path.join(qa_dir, '{}_data.pkl'.format(self.data_type)), 'rb') as f:
+                self.meta_data = pickle.load(f)
 
         with open(os.path.join(qa_dir, 'idx_word_dict.pkl'), 'rb') as f:
             idx_to_word_dict = pickle.load(f)
@@ -163,17 +151,26 @@ class CLEVRresnet101Dataset(Dataset):
 
 
     def __getitem__(self, idx):
+        feature_data = \
+        h5py.File('data/CLEVRresnet101_{}/{}.h5'.format(self.input_dim, self.data_type),
+                  'r')[
+            'features']
+
         row = self.meta_data[idx]
 
         img_index = row['image_index']
 
-        img_feature = self.feature_data[img_index]
+        img_feature = feature_data[img_index]
 
         if self.transform:
             img_feature = self.transform(img_feature)
 
-        # q = [self.START_TOKEN] + row['question'] + [self.END_TOKEN]
-        q = row['question']
+        if self.is_bert:
+            q = [101] + row['question'] + [102]
+        else:
+            q = row['question']
+
+        # q = row['question']
         q_type = row['question_type']
         a = row['answer']
 
@@ -245,7 +242,7 @@ class SCLEVRDataset(Dataset):
 
         return image, q_color_list, q_type_list, q_subtype_list, a_list
 
-def load_data(dataname, batch_size, input_dim, num_gpu, pretrained=False):
+def load_data(dataname, batch_size, input_dim, is_bert, pretrained=False):
 
     if dataname == 'CLEVR':
 
@@ -293,10 +290,12 @@ def load_data(dataname, batch_size, input_dim, num_gpu, pretrained=False):
         qa_dir = '/home/jinwon/Relational_Network/data/CLEVR_v1.0' \
                  '/processed_data'
 
-        train = CLEVRresnet101Dataset(qa_dir, True, transform=torch.Tensor)
-        val = CLEVRresnet101Dataset(qa_dir, False, transform=torch.Tensor)
+        train = CLEVRresnet101Dataset(qa_dir, True, input_dim,
+                                      is_bert, transform=torch.Tensor)
+        val = CLEVRresnet101Dataset(qa_dir, False, input_dim,
+                                    is_bert, transform=torch.Tensor)
         trn_kwargs = {'num_workers': 20, 'pin_memory': True, 'collate_fn': PadSequence()}
-        test_kwargs = {'num_workers': 20, 'pin_memory': True, 'collate_fn': PadSequence()}
+        test_kwargs = {'num_workers': 10, 'pin_memory': True, 'collate_fn': PadSequence()}
 
     elif dataname == 'SCLEVR':
         data_dir = '/home/jinwon/Relational_Network/data/Sort-of-CLEVR/raw_data/shape_2_color_shape'

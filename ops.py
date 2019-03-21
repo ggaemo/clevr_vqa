@@ -15,8 +15,9 @@ class PrintLayer(nn.Module):
 class Coordinate(torch.nn.Module):
     def __init__(self, reduced_dim):
         super(Coordinate, self).__init__()
-        coord = torch.linspace(-1, 1, steps=reduced_dim)
-        grid_x, grid_y = torch.meshgrid(coord, coord)
+        coord_x = torch.linspace(-1, 1, steps=reduced_dim[0])
+        coord_y = torch.linspace(-1, 1, steps=reduced_dim[1])
+        grid_x, grid_y = torch.meshgrid(coord_x, coord_y)
         grid_coord = torch.stack([grid_x, grid_y], 0)
         self.grid_coord = grid_coord.unsqueeze(0)
 
@@ -75,19 +76,47 @@ class ResBlock(nn.Module):
         return out
 
 class Attention(nn.Module):
-    def __init__(self, input_channel_num, output_channel_num):
+    def __init__(self, input_channel_num, channel_list):
         super(Attention, self).__init__()
-        self.attention = nn.Sequential(
-            nn.Conv2d(input_channel_num, output_channel_num, 1),
-            nn.ReLU(),
-            nn.Conv2d(output_channel_num, output_channel_num//2, 1),
-            nn.ReLU(),
-            nn.Conv2d(output_channel_num//2, 1, 1)
-        )
+
+
+
+        self.attention = ConvBlock(1, 1, 0, input_channel_num, channel_list)
+        self.logit = nn.Conv2d(channel_list[-1],1,1,1,0, bias=True)
+        # self.attention = nn.Sequential(
+        #     nn.Conv2d(input_channel_num, output_channel_num, 1),
+        #     nn.ReLU(),
+        #     nn.Conv2d(output_channel_num, output_channel_num//2, 1),
+        #     nn.ReLU(),
+        #     nn.Conv2d(output_channel_num//2, 1, 1)
+        # )
 
     def forward(self, x):
         out = self.attention(x)
+        out = self.logit(out)
         out = nn.Softmax(1)(out.view(out.size()[0], -1)).view_as(out)
+        return out
+
+class QueryAttention(nn.Module):
+    def __init__(self, ):
+        super(QueryAttention, self).__init__()
+
+
+        # self.attention = nn.Sequential(
+        #     nn.Conv2d(input_channel_num, output_channel_num, 1),
+        #     nn.ReLU(),
+        #     nn.Conv2d(output_channel_num, output_channel_num//2, 1),
+        #     nn.ReLU(),
+        #     nn.Conv2d(output_channel_num//2, 1, 1)
+        # )
+
+    def forward(self, query, value):
+        query = query.unsqueeze(2)
+        similarity = torch.matmul(value, query)
+        similarity = similarity.squeeze(2)
+
+        out = nn.Softmax(1)(similarity)
+        # out = nn.Softmax(1)(out.view(out.size()[0], -1)).view_as(out)
         return out
 
 
@@ -102,7 +131,7 @@ class ConvBlock(nn.Module):
                 nn.Conv2d(prev_channel,channel,kernel_size,stride,
                                          pad, bias=True),
                                # nn.BatchNorm2d(channel),
-                               nn.ReLU()])
+                               nn.ReLU(inplace=True)])
             prev_channel = channel
 
         self.conv_block = nn.Sequential(*layer_list)

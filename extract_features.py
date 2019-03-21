@@ -79,7 +79,7 @@ def main(args):
     cur_batch = []
     for i, (path, idx) in enumerate(input_paths):
       img = imread(path, mode='RGB')
-      # img = imresize(img, img_size, interp='bicubic')
+      img = imresize(img, img_size, interp='bicubic')
       img = img.transpose(2, 0, 1)[None]
       cur_batch.append(img)
       if len(cur_batch) == args.batch_size:

@@ -45,15 +45,17 @@ def train(model, train_loader, optimizer, q_type_dict, epoch, device):
 
     acc_list = list()
 
-    for batch_idx, (image, question_padded, lengths, q_type, a, idx) in enumerate(
+    for batch_idx, (image, question_padded, q_mask_padded, lengths, q_type, a, idx) in \
+            enumerate(
             train_loader, start=1):
         image = image.to(device)
         question_padded = question_padded.to(device)
+        q_mask_padded = q_mask_padded.to(device)
         lengths = lengths.to(device)
         a = a.to(device)
         q_type = q_type.to(device)
         optimizer.zero_grad()
-        logit = model((image, question_padded, lengths))
+        logit = model((image, question_padded, q_mask_padded, lengths))
         loss, acc, correct_list, num_q_type_list = loss_function(a, logit, q_type,
                                                                  q_type_dict)
         loss.backward()
@@ -90,15 +92,17 @@ def test(model, test_loader, q_type_dict, epoch, device):
 
     acc_list = list()
     with torch.no_grad():
-        for batch_idx, (image, question_padded, lengths, q_type, a, idx) in enumerate(
+        for batch_idx, (image, question_padded, q_mask_padded, lengths, q_type, a,
+                        idx) in enumerate(
                 test_loader, start=1):
             image = image.to(device)
             question_padded = question_padded.to(device)
+            q_mask_padded = q_mask_padded.to(device)
             lengths = lengths.to(device)
             a = a.to(device)
             q_type = q_type.to(device)
 
-            logit = model((image, question_padded, lengths))
+            logit = model((image, question_padded, q_mask_padded, lengths))
             loss, acc, correct_list, num_q_type_list = loss_function(a, logit, q_type, q_type_dict)
             test_loss += loss.item()
             test_acc += acc

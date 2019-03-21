@@ -58,11 +58,13 @@ class Model(torch.nn.Module):
 
         self.g_theta_layer = list()
 
-        prev_channel = (prev_channel + 2) + rnn_dim * 2
+        prev_channel = (prev_channel + 2) + rnn_dim * 2 * 2
 
         self.q_att = Attention(rnn_dim * 2, q_att_layer)
 
-        self.g_theta = ConvBlock(1, 1, 0, prev_channel, g_theta_layer).cuda()
+        self.q_att_2 = Attention(rnn_dim * 2, q_att_layer)
+
+        self.g_theta = ConvBlock(1, 1, 0, prev_channel, g_theta_layer)
         # self.g_theta = ConvBlock(1, 1, 0, prev_channel, g_theta_layer)
 
         self.f_phi_layer = list()
@@ -93,29 +95,55 @@ class Model(torch.nn.Module):
 
         self.gru.flatten_parameters()
         # _, question_embed = self.gru(embedded) # (num_layers *
-        question_embed_t, _ = self.gru(embedded) # (num_layers *num_directions, batch, hidden_size):
+        question_embed_t, question_embed_last = self.gru(embedded) # (num_layers
+        # *num_directions, batch, hidden_size):
 
-        # question_embed_t, lengths = pad_packed_sequence(question_embed_t)
-        #
+        question_embed_last = question_embed_last.permute(1, 0, 2)
+        question_embed_last = question_embed_last.flatten(1)
+
+        question_embed_t, lengths = pad_packed_sequence(question_embed_t)
+
+
         question_embed_t = question_embed_t.permute(1, 2, 0) #batch, num_directions *hidden_size, seq_len
         question_embed_t = question_embed_t.unsqueeze(3)  # batch, num_directions
         # # *hidden_size, seq_len, 1
         #
         q_att = self.q_att(question_embed_t)
+        q_mask_padded = q_mask_padded.unsqueeze(1).unsqueeze(3).to(torch.float32)
+        q_att = q_att * q_mask_padded
         question_embed = torch.sum(torch.mul(q_att, question_embed_t), (2, 3))
 
-        question_embed = question_embed.permute(1, 0, 2) # b, 2, channel
-        question_embed = question_embed.flatten(1)  # (batch_size, channel * 2)
+        # q_att_2 = self.q_att_2(question_embed_t)
+        # q_att_2 = q_att_2 * q_mask_padded
+        # question_embed_2 = torch.sum(torch.mul(q_att_2, question_embed_t), (2, 3))
+
+        question_embed_2 = question_embed_last
+
         question_embed = question_embed.unsqueeze(2).unsqueeze(3)  # (batch_size, channel * 2, 1, 1)
+        question_embed_2 = question_embed_2.unsqueeze(2).unsqueeze(
+            3)  # (batch_size, channel * 2, 1, 1)
 
         question_embed = question_embed.expand(-1, -1, self.reduced_dim[0],
                                                self.reduced_dim[1])
 
+        question_embed_2 = question_embed_2.expand(-1, -1, self.reduced_dim[0],
+                                               self.reduced_dim[1])
+
+        question_embed = torch.cat([question_embed, question_embed_2], dim=1)
+
         image_question = torch.cat((image_embed, question_embed), dim=1)  # b, c, h, w
+
+        # image_question_2 = torch.cat((image_embed, question_embed_2), dim=1)  # b, c, h, w
 
         feature = self.g_theta(image_question)
 
         feature_agg = torch.sum(feature, (2, 3))
+
+        # feature_2 = self.g_theta(image_question_2)
+
+        # feature_agg_2 = torch.sum(feature_2, (2, 3))
+
+        # feature_agg = torch.cat([feature_agg, feature_agg_2], dim=1)
 
         feature_agg = self.f_phi(feature_agg)
 
