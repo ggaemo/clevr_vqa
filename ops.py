@@ -130,7 +130,7 @@ class ConvBlock(nn.Module):
             layer_list.extend([
                 nn.Conv2d(prev_channel,channel,kernel_size,stride,
                                          pad, bias=True),
-                               # nn.BatchNorm2d(channel),
+                               nn.Dropout(0.5),
                                nn.ReLU(inplace=True)])
             prev_channel = channel
 
@@ -140,6 +140,49 @@ class ConvBlock(nn.Module):
     def forward(self, x):
         out = self.conv_block(x)
         return out
+
+
+class FCReLUBlock(nn.Module):
+    def __init__(self, prev_channel, channel_list):
+        super(FCReLUBlock, self).__init__()
+
+        layer_list = list()
+
+        for layer_num, channel in enumerate(channel_list):
+            layer_list.extend([
+                nn.Linear(prev_channel,channel),
+                               nn.Dropout(0.5),
+                               nn.ReLU(inplace=True)])
+            prev_channel = channel
+
+        self.fc_relu = nn.Sequential(*layer_list)
+
+    def forward(self, x):
+        out = self.fc_relu(x)
+        return out
+
+class FCReLUResBlock(nn.Module):
+    def __init__(self, prev_channel, channel_list):
+        super(FCReLUBlock, self).__init__()
+
+        layer_list = list()
+
+        for layer_num, channel in enumerate(channel_list):
+            layer_list.extend([
+                nn.Linear(prev_channel,channel),
+                               nn.Dropout(0.5),
+                               nn.ReLU(inplace=True)])
+            prev_channel = channel
+
+        self.fc_relu = nn.Sequential(*layer_list)
+
+    def forward(self, x):
+        residual = x
+        out = self.fc_relu(x)
+        out += residual
+        out - nn.Linear(out)
+        return out
+
 
 class FC_ReLU(nn.Module):
     def __init__(self, input_channel_num, output_channel_num):
