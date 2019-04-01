@@ -18,11 +18,11 @@ class Model(torch.nn.Module):
                  answer_vocab_size, fixed_embed, **kwargs):
         super(Model, self).__init__()
 
-        self.encode = FCReLUBlock(2048 + 4, [2048, 1024])
+        # self.encode = FCReLUBlock(2048 + 4, [2048, 1024])
 
-        prev_channel = 1024
+        prev_channel = 2048 + 4
 
-        with open('gqadata/glove_300d_gqa.pkl', 'rb') as f:
+        with open('gqadata/glove_300d_gqa_all.pkl', 'rb') as f:
             weight = pickle.load(f)
             self.embedding = nn.Embedding(*weight.shape)
             self.embedding.load_state_dict({'weight': torch.Tensor(weight)})
@@ -60,7 +60,7 @@ class Model(torch.nn.Module):
 
     def forward(self, x):
         image_embed, question_padded, q_mask_padded, lengths = x
-        image_embed = self.encode(image_embed)
+        # image_embed = self.encode(image_embed)
 
         # image_embed = image_embed / (image_embed.norm(p=2, dim=1, keepdim=True).expand_as(
         #     image_embed) + 1e-8)
