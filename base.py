@@ -40,6 +40,8 @@ class Model(torch.nn.Module):
             self.reduced_dim = (14, 14)
         elif input_dim == 320:
             self.reduced_dim = (20, 30)
+        elif input_dim == 2048:
+            self.reduced_dim = (7, 7)
         prev_channel = 256
 
         self.grid_coord = Coordinate(self.reduced_dim)

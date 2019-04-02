@@ -35,6 +35,27 @@ def loss_function(target, logit, q_type, q_type_dict):
 
     return output, acc, correct_list, num_q_type_list
 
+def loss_function(target, logit, q_type, q_type_dict):
+    loss = nn.CrossEntropyLoss()
+
+    output = loss(logit, target)
+
+    pred = torch.argmax(logit, dim=1)
+    right_wrong = torch.eq(pred, target)
+
+    acc = float(torch.sum(right_wrong)) / float(target.size()[0])
+
+    correct_list = torch.zeros(len(q_type_dict.keys()))
+    num_q_type_list = torch.zeros(len(q_type_dict.keys()))
+    for q, val in q_type_dict.items():
+        mask = torch.eq(q_type, q)
+        num_q = torch.sum(mask)
+        right_wrong_tmp = right_wrong.masked_select(mask)
+        num_q_type_list[q] = num_q
+        tmp_correct = float(torch.sum(right_wrong_tmp))
+        correct_list[q] = tmp_correct
+
+    return output, acc, correct_list, num_q_type_list
 
 def train(model, train_loader, optimizer, q_type_dict, epoch, device):
     model.train()
@@ -54,6 +75,7 @@ def train(model, train_loader, optimizer, q_type_dict, epoch, device):
         lengths = lengths.to(device)
         a = a.to(device)
         q_type = q_type.to(device)
+        # program = program.to(device)
         optimizer.zero_grad()
         logit = model((image, question_padded, q_mask_padded, lengths))
         loss, acc, correct_list, num_q_type_list = loss_function(a, logit, q_type,
@@ -65,13 +87,13 @@ def train(model, train_loader, optimizer, q_type_dict, epoch, device):
         train_num_q_list += num_q_type_list.data.numpy()
         optimizer.step()
 
-
         acc_list.append(acc)
         if batch_idx % 500 == 0 or batch_idx == 10:
             print(batch_idx)
             print('train', epoch, train_acc/batch_idx, 'batch acc', acc)
             print(acc_list[:20], acc_list[-20:])
             print(np.sum(train_correct_list)/np.sum(train_num_q_list), train_acc/batch_idx)
+
 
     train_loss /= batch_idx
     train_acc /= batch_idx

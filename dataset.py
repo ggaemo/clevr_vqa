@@ -51,6 +51,7 @@ class PadSequenceProgram():
         batch = sorted(batch, key=lambda x: x[2], reverse=True)
 
         image_list = list()
+        bbox_list = list()
         q_list = list()
         q_len_list = list()
         q_type_list = list()
@@ -59,8 +60,9 @@ class PadSequenceProgram():
         q_mask_list = list()
         program_list = list()
 
-        for image, q, q_len, q_type, a, idx, program in  batch:
+        for image, bbox, q, q_len, q_type, a, idx, program in  batch:
             image_list.append(image)
+            bbox_list.append(bbox)
             q_list.append(q)
             q_len_list.append(q_len)
             q_type_list.append(q_type)
@@ -70,6 +72,7 @@ class PadSequenceProgram():
             program_list.append(program)
 
         image = torch.stack(image_list)
+        bbox = torch.stack(bbox_list)
         q = [torch.LongTensor(x) for x in q_list]
         q_mask = [torch.LongTensor(x) for x in q_mask_list]
         a = torch.LongTensor(a_list)
@@ -82,7 +85,8 @@ class PadSequenceProgram():
         program_padded = torch.nn.utils.rnn.pad_sequence(program, batch_first=True)
         lengths = torch.LongTensor(q_len_list)
 
-        return image, q_padded, q_mask_padded, lengths, q_type, a, idx_list, program_padded
+        return image, bbox, q_padded, q_mask_padded, lengths, q_type, a, idx_list, \
+               program_padded
 
 class CLEVRDataset(Dataset):
 
@@ -218,7 +222,7 @@ class CLEVRresnet101Dataset(Dataset):
 
 class GQASpatialDataset(Dataset):
 
-    def __init__(self, is_train, transform=None):
+    def __init__(self, is_train, balanced, transform=None):
 
         # self.feature_data = np.load('data/CLEVRresnet101_{}/{}.npy'.format( input_dim,
         #                                                                   self.data_type))
@@ -228,8 +232,17 @@ class GQASpatialDataset(Dataset):
         else:
             self.data_type='val'
 
-        with open('gqadata/balanced_{}_for_input.json'.format(self.data_type)) as f:
-            self.meta_data = json.load(f)['questions']
+
+        if balanced:
+            with open('gqadata/balanced_{}_for_input.json'.format(self.data_type)) as f:
+                self.meta_data = json.load(f)['questions']
+
+            # with open('gqadata/filtered_balanced_{}_for_input.json'.format(self.data_type)) \
+            #         as f:
+            #     self.meta_data = json.load(f)['questions']
+        else:
+            with open('gqadata/all_{}_for_input.json'.format(self.data_type)) as f:
+                self.meta_data = json.load(f)['questions']
 
         with open('gqadata/gqa_spatial_merged_info.json') as f:
             self.spatial = json.load(f)
@@ -267,21 +280,23 @@ class GQASpatialDataset(Dataset):
 
 class GQAObjectsDataset(Dataset):
 
-    def __init__(self, is_train, transform=None):
+    def __init__(self, is_train, balanced, transform=None):
 
         if is_train:
             self.data_type = 'train'
         else:
             self.data_type='val'
 
-        # with open('gqadata/balanced_{}_for_input.json'.format(self.data_type)) as f:
-        #     self.meta_data = json.load(f)['questions']
+        if balanced:
+            with open('gqadata/balanced_{}_for_input.json'.format(self.data_type)) as f:
+                self.meta_data = json.load(f)['questions']
 
-        with open('gqadata/filtered_balanced_{}_for_input.json'.format(self.data_type)) \
-                as f:
-            self.meta_data = json.load(f)['questions']
-
-
+            # with open('gqadata/filtered_balanced_{}_for_input.json'.format(self.data_type)) \
+            #         as f:
+            #     self.meta_data = json.load(f)['questions']
+        else:
+            with open('gqadata/all_{}_for_input.json'.format(self.data_type)) as f:
+                self.meta_data = json.load(f)['questions']
 
 
         with open('gqadata/gqa_objects_merged_info.json') as f:
@@ -293,17 +308,17 @@ class GQAObjectsDataset(Dataset):
                             'query':3,
                             'verify':4}
 
-        self.module_id_dict = {'select' : 1,
-                               'relate' : 2,
-                               'filter' : 3,
-                               'query' : 4,
-                               'choose' : 4,
-                               'verify' : 4,
-                               'exist' : 4,
-                               'same' : 4,
-                               'different' : 4,
-                               'common' : 4
-                               }
+        # self.module_id_dict = {'select' : 1,
+        #                        'relate' : 2,
+        #                        'filter' : 3,
+        #                        'query' : 4,
+        #                        'choose' : 4,
+        #                        'verify' : 4,
+        #                        'exist' : 4,
+        #                        'same' : 4,
+        #                        'different' : 4,
+        #                        'common' : 4
+        #                        }
 
         if transform:
             self.transform = transform
@@ -334,9 +349,62 @@ class GQAObjectsDataset(Dataset):
         q_type = self.q_type_dict[row['type']]
         a = row['a2idx']
 
-        program = [self.module_id_dict[x] for x in row['operation']]
+        # program = [self.module_id_dict[x] for x in row['operation']]
 
-        return img_feature, q, len(q), q_type, a, idx, program
+        # return img_feature, bbox_feature, q, len(q), q_type, a, idx, program
+        return img_feature, q, len(q), q_type, a, idx
+
+
+class GQADataset(Dataset):
+
+    def __init__(self, is_train, balanced, transform=None):
+
+        if is_train:
+            self.data_type = 'train'
+        else:
+            self.data_type='val'
+
+
+        if balanced:
+            with open('gqadata/balanced_{}_for_input.json'.format(self.data_type)) as f:
+                self.meta_data = json.load(f)['questions']
+
+            # with open('gqadata/filtered_balanced_{}_for_input.json'.format(self.data_type)) \
+            #         as f:
+            #     self.meta_data = json.load(f)['questions']
+        else:
+            with open('gqadata/all_{}_for_input.json'.format(self.data_type)) as f:
+                self.meta_data = json.load(f)['questions']
+
+        self.img_dir = '/mnt/sda/jinwon_data/images'
+
+        if transform:
+            self.transform = transform
+
+    def __len__(self):
+        return len(self.meta_data)
+
+
+    def __getitem__(self, idx):
+
+
+        row = self.meta_data[idx]
+
+        img_index = self.object[row['imageId']]['index']
+
+        img_name = os.path.join(self.img_dir, self.data_type,
+                                'CLEVR_{}_{:06d}.png'.format(self.data_type, img_index))
+        image = Image.open(img_name).convert('RGB')
+
+        if self.transform:
+            image= self.transform(image)
+
+        q = row['q2idx']
+        q_type = self.q_type_dict[row['type']]
+        a = row['a2idx']
+
+        return image, q, q_type, a
+
 
 class SCLEVRDataset(Dataset):
 
@@ -403,7 +471,7 @@ class SCLEVRDataset(Dataset):
 
         return image, q_color_list, q_type_list, q_subtype_list, a_list
 
-def load_data(dataname, batch_size, input_dim, is_bert, pretrained=False):
+def load_data(dataname, batch_size, input_dim, is_bert, balanced):
 
     if dataname == 'CLEVR':
 
@@ -411,32 +479,19 @@ def load_data(dataname, batch_size, input_dim, is_bert, pretrained=False):
         qa_dir =  '/home/jinwon/Relational_Network/data/CLEVR_v1.0' \
                   '/processed_data'
 
-        if pretrained:
-            transform_list = [
+
+        transform_list = [
             transforms.Resize((input_dim, input_dim)),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                 std=[0.229, 0.224, 0.225]),
-            ]
-            test_transform_list = [
+            transforms.Pad((8, 8), padding_mode='edge'),
+            transforms.RandomCrop((input_dim, input_dim)),
+            transforms.RandomRotation((-2.8, 2.8)),
+            transforms.ToTensor()
+        ]
+
+        test_transform_list = [
                 transforms.Resize((input_dim, input_dim)),
-                transforms.ToTensor(),
-                transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                     std=[0.229, 0.224, 0.225]),
-            ]
-        else:
-            transform_list = [
-                transforms.Resize((input_dim, input_dim)),
-                transforms.Pad((8, 8), padding_mode='edge'),
-                transforms.RandomCrop((input_dim, input_dim)),
-                transforms.RandomRotation((-2.8, 2.8)),
                 transforms.ToTensor()
             ]
-
-            test_transform_list = [
-                    transforms.Resize((input_dim, input_dim)),
-                    transforms.ToTensor()
-                ]
 
         data_transform = transforms.Compose(transform_list)
         test_data_transform = transforms.Compose(test_transform_list)
@@ -482,18 +537,18 @@ def load_data(dataname, batch_size, input_dim, is_bert, pretrained=False):
 
     elif dataname == 'GQASpatial':
 
-        train = GQASpatialDataset(True, torch.Tensor)
-        val = GQASpatialDataset(False, torch.Tensor)
+        train = GQASpatialDataset(True, balanced, torch.Tensor)
+        val = GQASpatialDataset(False, balanced, torch.Tensor)
 
         trn_kwargs = {'num_workers': 20, 'pin_memory': True, 'collate_fn': PadSequence()}
         test_kwargs = {'num_workers': 20, 'pin_memory': True, 'collate_fn': PadSequence()}
 
     elif dataname == 'GQAObjects':
-        train = GQAObjectsDataset(True, torch.Tensor)
-        val = GQAObjectsDataset(False, torch.Tensor)
+        train = GQAObjectsDataset(True, balanced, torch.Tensor)
+        val = GQAObjectsDataset(False, balanced, torch.Tensor)
 
-        trn_kwargs = {'num_workers': 20, 'pin_memory': True, 'collate_fn': PadSequenceProgram()}
-        test_kwargs = {'num_workers': 20, 'pin_memory': True, 'collate_fn': PadSequenceProgram()}
+        trn_kwargs = {'num_workers': 20, 'pin_memory': True, 'collate_fn': PadSequence()}
+        test_kwargs = {'num_workers': 20, 'pin_memory': True, 'collate_fn': PadSequence()}
 
 
     train_loader = DataLoader(train, batch_size=batch_size, shuffle=True, **trn_kwargs)

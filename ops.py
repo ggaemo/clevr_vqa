@@ -161,6 +161,9 @@ class FCReLUBlock(nn.Module):
         out = self.fc_relu(x)
         return out
 
+
+
+
 class FCReLUResBlock(nn.Module):
     def __init__(self, prev_channel, channel_list):
         super(FCReLUBlock, self).__init__()
@@ -183,62 +186,24 @@ class FCReLUResBlock(nn.Module):
         out - nn.Linear(out)
         return out
 
+class Select(nn.Module):
+    def __init__(self, prev_channel, channel_list):
+        super(Select, self).__init__()
 
-class FC_ReLU(nn.Module):
-    def __init__(self, input_channel_num, output_channel_num):
-        super(FC_ReLU, self).__init__()
-        self.fc_relu = nn.Sequential(
-            nn.utils.weight_norm(nn.Linear(input_channel_num, output_channel_num)),
-            nn.ReLU()
-        )
+        layer_list = list()
+        channel_list.append(1)
+
+        for layer_num, channel in enumerate(channel_list):
+            layer_list.extend([
+                nn.Linear(prev_channel,channel),
+                               nn.Dropout(0.5),
+                               nn.ReLU(inplace=True)])
+            prev_channel = channel
+
+        self.fc_relu = nn.Sequential(*layer_list)
 
     def forward(self, x):
+        # img_bbox = torch.cat([img, bbox], 2)
         out = self.fc_relu(x)
-        return out
-
-
-
-class MultiHeadAttention(nn.Module):
-    def __init__(self, heads, d_model):
-        super().__init__()
-
-        self.d_model = d_model
-        self.d_k = d_model // heads
-        self.h = heads
-
-        self.q_linear = nn.Linear(d_model, d_model)
-        self.v_linear = nn.Linear(d_model, d_model)
-        self.k_linear = nn.Linear(d_model, d_model)
-        self.out = nn.Linear(d_model, d_model)
-
-    def forward(self, q, k, v):
-
-        q # bs, seq_len, d_model
-
-        bs = q.size(0)
-
-        k = self.k_linear(k).view(bs, -1, self.h, self.d_k)
-        q = self.k_linear(q).view(bs, -1, self.h, self.d_k)
-        v = self.k_linear(v).view(bs, -1, self.h, self.d_k)
-
-        k = k.transpose(1, 2) #bs h seq_len, d_k
-        q = q.transpose(1, 2)  # bs h seq_len, d_k
-        v = v.transpose(1, 2)  # bs h seq_len, d_k
-
-        scores = selfattention(q, k, v, self.d_k)
-
-        concat = scores.tranpose(1,2).contiguous().view(bs, -1, self.d_model)
-
-        output = self.out(concat)
-        return output
-
-
-
-def selfattention(q, k, v, d_k):
-
-    scores = torch.matmul(q, k.tranpose(-2, -1)) / torch.sqrt(d_k)
-
-    scores = nn.Softmax(-1)
-
-    output = torch.matmul(scores, v)
-
+        softmax_weight = nn.Softmax(1)(out)
+        return softmax_weight

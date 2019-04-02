@@ -42,7 +42,7 @@ class Model(torch.nn.Module):
         self.grid_coord = Coordinate(self.reduced_dim)
 
 
-        with open('gqadata/glove_300d_gqa.pkl', 'rb') as f:
+        with open('gqadata/glove_300d_gqa_all.pkl', 'rb') as f:
             weight = pickle.load(f)
             self.embedding = nn.Embedding(*weight.shape)
             self.embedding.load_state_dict({'weight': torch.Tensor(weight)})
@@ -51,11 +51,11 @@ class Model(torch.nn.Module):
             self.embedding.weight.requires_grad = False
 
         self.gru = nn.GRU(input_size=embedding_dim, hidden_size=rnn_dim,
-                          bidirectional=False)
+                          bidirectional=True)
 
         self.g_theta_layer = list()
 
-        prev_channel = (prev_channel + 2) + rnn_dim
+        prev_channel = (prev_channel + 2) + rnn_dim * 2
 
         # self.q_att = Attention(rnn_dim * 2, rnn_dim)
 

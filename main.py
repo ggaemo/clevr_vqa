@@ -30,6 +30,7 @@ parser.add_argument('-embedding_dim', type=int)
 parser.add_argument('-q_att_layer', type=int, nargs='+')
 parser.add_argument('-img_att_layer', type=int, nargs='+')
 parser.add_argument('-fixed_embed', action='store_true', default=False)
+parser.add_argument('-balanced', action='store_true', default=False)
 parser.add_argument('-rnn_dim', type=int)
 parser.add_argument('-rnn_layer_size', type=int)
 parser.add_argument('-vocab_size', type=int, default=82) # 81 for CLEVR + 1(0 index for '_' pad)
@@ -143,33 +144,18 @@ else:
                 f'e_{args.embedding_dim}_r_{args.rnn_dim}_at_{q_att_layer}' \
                 f'b_{args.batch_size}_fixed_embed_{args.fixed_embed}_gpu_{multiplier}_{args.option}'
     elif 'GQA' in args.datasetname:
-        if args.model == 'topdown':
-            f_phi_layer = '-'.join([str(x) for x in args.f_phi_layer])
-            img_att_layer = '-'.join([str(x) for x in args.img_att_layer])
-            log_dir = f'result/{args.datasetname}/' \
-                f'{args.model}_f_{f_phi_layer}_img_att{img_att_layer}' \
-                f'e_{args.embedding_dim}_r_{args.rnn_dim}_' \
-                f'b_{args.batch_size}_fixed_embed_{args.fixed_embed}_gpu_{multiplier}_{args.option}'
-        elif args.model == 'base':
+
+        if args.model == 'base':
             g_theta_layer = '-'.join([str(x) for x in args.g_theta_layer])
             f_phi_layer = '-'.join([str(x) for x in args.f_phi_layer])
             log_dir = f'result/{args.datasetname}/' \
                 f'{args.model}_g_{g_theta_layer}_f_{f_phi_layer}_' \
                 f'e_{args.embedding_dim}_r_{args.rnn_dim}_' \
                 f'b_{args.batch_size}_fixed_embed_{args.fixed_embed}_gpu_{multiplier}_{args.option}'
-        elif args.model == 'base_bert':
-            g_theta_layer = '-'.join([str(x) for x in args.g_theta_layer])
-            f_phi_layer = '-'.join([str(x) for x in args.f_phi_layer])
-            log_dir = f'result/{args.datasetname}/{args.model}_i_{args.input_dim}_' \
-                f'g_{g_theta_layer}_f_{f_phi_layer}_r_{args.rnn_dim}_b_{args.batch_size}_' \
-                f'fixed_embed_{args.fixed_embed}_gpu_{multiplier}_{args.option}'
-        elif args.model == 'base_q_att':
-            g_theta_layer = '-'.join([str(x) for x in args.g_theta_layer])
-            f_phi_layer = '-'.join([str(x) for x in args.f_phi_layer])
-            q_att_layer = '-'.join([str(x) for x in args.q_att_layer])
+        elif args.model == 'module':
             log_dir = f'result/{args.datasetname}/' \
-                f'{args.model}_g_{g_theta_layer}_f_{f_phi_layer}_' \
-                f'e_{args.embedding_dim}_r_{args.rnn_dim}_at_{q_att_layer}' \
+                f'{args.model}'\
+                f'e_{args.embedding_dim}_r_{args.rnn_dim}_' \
                 f'b_{args.batch_size}_fixed_embed_{args.fixed_embed}_gpu_{multiplier}_{args.option}'
 
     model_dir = os.path.join(log_dir, 'model')
@@ -177,9 +163,6 @@ else:
     if not os.path.exists(model_dir):
         os.makedirs(model_dir)
     if 'CLEVR' in args.datasetname:
-
-
-
 
         if args.model == 'base':
             from base import Model
@@ -201,6 +184,9 @@ else:
         if args.model == 'base':
             from base_gqa_object import Model
             model_script = 'base_gqa_object.py'
+        if args.model == 'module':
+            from module_gqa_object import Model
+            model_script = 'module_gqa_object.py'
 
     shutil.copyfile(model_script, os.path.join(model_dir, model_script))
     shutil.copyfile('ops.py', os.path.join(model_dir, 'ops.py'))
@@ -212,7 +198,7 @@ else:
     #               args.rnn_dim,
     #               args.answer_vocab_size, args.fixed_embed)
 
-    optimizer = optim.Adam(model.parameters(), lr=2.5 * 1e-4)
+    optimizer = optim.Adam(model.parameters())
 
     start_epoch = 0
 
@@ -228,11 +214,12 @@ model.to(device)
 
 
 is_bert = args.model == 'base_bert'
+
 train_loader, test_loader, input_dim = dataset.load_data(args.datasetname,
                                                          args.batch_size * multiplier,
                                                          args.input_dim,
                                                          is_bert,
-                                                         multiplier)
+                                                         args.balanced)
 
 
 

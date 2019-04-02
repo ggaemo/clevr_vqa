@@ -6,7 +6,7 @@ from torch import nn
 
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
-from ops import ConvBlock, Coordinate, Attention, FCReLUBlock
+from ops import ConvBlock, Coordinate, Attention, FCReLUBlock, Select
 
 
 
@@ -19,7 +19,8 @@ class Model(torch.nn.Module):
 
         # self.encode = FCReLUBlock(2048 + 4, [2048, 1024])
 
-        prev_channel = 2048 + 4
+        img_channel = 2048
+        bbox_channel = 4
 
         if balanced:
             with open('gqadata/glove_300d_gqa_balanced}.pkl', 'rb') as f:
@@ -32,6 +33,7 @@ class Model(torch.nn.Module):
                 self.embedding = nn.Embedding(*weight.shape)
                 self.embedding.load_state_dict({'weight': torch.Tensor(weight)})
 
+
         if fixed_embed:
             self.embedding.weight.requires_grad = False
 
@@ -40,11 +42,9 @@ class Model(torch.nn.Module):
 
         self.g_theta_layer = list()
 
-        prev_channel = (prev_channel) + rnn_dim * 2
+        img_bbox_q_channel = (img_channel + bbox_channel) + rnn_dim * 2
 
-        self.g_theta = FCReLUBlock(prev_channel, g_theta_layer)
-
-        # FCReLUResBlock
+        self.select = Select(img_bbox_q_channel , [1024, 1024])
 
         self.f_phi_layer = list()
 
@@ -64,7 +64,7 @@ class Model(torch.nn.Module):
                       bias=False)])
 
     def forward(self, x):
-        image_embed, question_padded, q_mask_padded, lengths = x
+        image_embed, bbox, question_padded, q_mask_padded, lengths, program_padded = x
         # image_embed = self.encode(image_embed)
 
         # image_embed = image_embed / (image_embed.norm(p=2, dim=1, keepdim=True).expand_as(
@@ -95,6 +95,11 @@ class Model(torch.nn.Module):
         # channel * 2)
 
         image_question = torch.cat((image_embed, question_embed), dim=2)
+
+
+        select_output = self.select(image_question)
+
+        self.select(image_question)
 
         feature = self.g_theta(image_question)
 
